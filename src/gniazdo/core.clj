@@ -16,27 +16,37 @@
 
 (defprotocol Sendable
   (send-to-endpoint [this ^RemoteEndpoint e]
-    "Sends an entity to a given WebSocket endpoint."))
+    "Sends an entity to a given WebSocket endpoint.")
+  (send-partial-to-endpoint [this ^RemoteEndpoint e last]
+    "Sends a partial entity to a given WebSocket endpoint, for the last part, last should be true."))
 
 (extend-protocol Sendable
   java.lang.String
   (send-to-endpoint [msg ^RemoteEndpoint e]
     @(.sendStringByFuture e msg))
+  (send-partial-to-endpoint [msg ^RemoteEndpoint e last]
+    (.sendPartialString e msg last))
 
   java.nio.ByteBuffer
   (send-to-endpoint [buf ^RemoteEndpoint e]
-    @(.sendBytesByFuture e buf)))
+    @(.sendBytesByFuture e buf))
+  (send-partial-to-endpoint [buf ^RemoteEndpoint e last]
+    (.sendPartialBytes e buf last)))
 
 (extend-type (class (byte-array 0))
   Sendable
   (send-to-endpoint [data ^RemoteEndpoint e]
-    @(.sendBytesByFuture e (ByteBuffer/wrap data))))
+    @(.sendBytesByFuture e (ByteBuffer/wrap data)))
+  (send-partial-to-endpoint [data ^RemoteEndpoint e last]
+    (.sendPartialBytes e (ByteBuffer/wrap data) last)))
 
 ;; ## Client
 
 (defprotocol ^:private Client
   (send-msg [this msg]
     "Sends a message (implementing `gniazdo.core/Sendable`) to the given WebSocket.")
+  (send-partial-msg [this msg last]
+    "Sends a partial message (implementing `gniazdo.core/Sendable`) to the given WebSocket. For the last part, last should be true")
   (close [this]
     "Closes the WebSocket."))
 
@@ -136,6 +146,8 @@
        (reify Client
          (send-msg [_ msg]
            (send-to-endpoint msg (.getRemote session)))
+         (send-partial-msg [_ msg last]
+           (send-partial-to-endpoint msg (.getRemote session) last))
          (close [_]
            (when cleanup
              (cleanup))
